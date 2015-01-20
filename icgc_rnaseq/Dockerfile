@@ -2,7 +2,7 @@ FROM ubuntu
 
 
 RUN     apt-get update
-RUN     apt-get install -y curl wget g++ make python libboost-dev libboost-thread-dev libboost-system-dev zlib1g-dev ncurses-dev unzip
+RUN     apt-get install -y curl wget g++ make python libboost-dev libboost-thread-dev libboost-system-dev zlib1g-dev ncurses-dev unzip gzip bzip2 libxml2-dev libxslt-dev python-dev python-pip
 WORKDIR /opt
 
 RUN		mkdir /opt/bin
@@ -27,8 +27,12 @@ RUN     tar xvzf tophat-2.0.12.tar.gz
 RUN     cd /opt/tophat-2.0.12 && ./configure --prefix=/opt --with-boost-libdir=/usr/lib/x86_64-linux-gnu/ && make && make install
 
 #install STAR
-RUN     wget https://github.com/alexdobin/STAR/archive/STAR_2.4.0d.tar.gz
-RUN     tar xvzf STAR_2.4.0d.tar.gz
-RUN     cd /opt/STAR-STAR_2.4.0d && make && cp /opt/STAR-STAR_2.4.0d/STAR /opt/bin/
+RUN     wget https://github.com/alexdobin/STAR/archive/STAR_2.4.0g1.tar.gz
+RUN     tar xvzf STAR_2.4.0g1.tar.gz
+RUN     cp /opt/STAR-STAR_2.4.0g1/bin/Linux_x86_64/STAR /opt/bin/
+
+#install python packages
+RUN     pip install lxml
+
 
 ENV		PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/bin
