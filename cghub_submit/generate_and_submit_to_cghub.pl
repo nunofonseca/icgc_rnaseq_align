@@ -37,13 +37,13 @@ sub main()
 	while(my $line = <IN>)
 	{
 		chomp($line);
-		my ($original_analysis_id,$new_filepath,$new_md5,$run_cmd) = split(/\t/,$line);
+		my ($original_analysis_id,$new_filepath,$new_md5,$run_cmd,$aligner) = split(/\t/,$line);
 		#dump original metadata
 		run_command("dump_all_metadata.py $original_analysis_id",$STDOUT_FILE,$STDERR_FILE);
 		#exract original metadata still relevant to PCAWG metadata
 		my $md_lines = extract_old_metadata_elements($original_analysis_id);
 		#create new metadata package from old metadata bits and template
-		my $new_analysis_id = synthesize_new_analysis($md_lines,$new_filepath,$new_md5,$run_cmd,$template_analysis_xml,$original_analysis_id);
+		my $new_analysis_id = synthesize_new_analysis($md_lines,$new_filepath,$new_md5,$run_cmd,$template_analysis_xml,$original_analysis_id,$aligner);
 		#do the actual validation->submission->upload
 		if(validate_new_metadata($new_analysis_id) && $submit_key)
 		{
@@ -94,11 +94,10 @@ sub upload_data()
 
 sub synthesize_new_analysis()
 {
-	my ($md_lines,$filepath,$md5,$run_cmd,$templateF,$original_analysis_id) = @_;
+	my ($md_lines,$filepath,$md5,$run_cmd,$templateF,$original_analysis_id,$aligner) = @_;
     my @run_cmds = split(/\$/,$run_cmd);
 
- 	my @f=split(/\//,$filepath);
-	my $filename = pop(@f);	
+    my $filename = "PCAWG.$original_analysis_id.$aligner.v1.bam";
 
 	my $new_analysis_id = run_command('uuidgen');
 	chomp($new_analysis_id);
@@ -108,7 +107,7 @@ sub synthesize_new_analysis()
 	#copy the original metadata into the new directory
 	run_command("rsync -av $original_analysis_id/*.xml $new_analysis_id/");
 	#link in the new realigned file into the new directory
-	run_command("ln -s $filepath $new_analysis_id/PCAWG.$filename");
+	run_command("ln -s $filepath $new_analysis_id/$filename");
 	
 	open(TEMPLATE,"<$templateF");
 	open(OUT,">$new_analysis_id/analysis.xml");
@@ -122,7 +121,7 @@ sub synthesize_new_analysis()
 		if($line =~ /<FILE/)
 		{
 			$line =~ s/checksum="[^"]*"/checksum="$md5"/;
-			$line =~ s/filename="[^"]*"/filename="PCAWG.$filename"/;
+			$line =~ s/filename="[^"]*"/filename="$filename"/;
 			$line =~ s/filetype="[^"]*"/filetype="bam"/;
 		}
         my $tmp_cmd = join("\n", @run_cmds);

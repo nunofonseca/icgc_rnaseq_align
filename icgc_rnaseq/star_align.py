@@ -83,7 +83,7 @@ def spreadsheet2dict(spreadFile):
             for k, key in enumerate(sl):
                 key2field[key] = k
         else:
-            spreadDict[sl[key2field['fastq_analysis_id']]] = sl
+            spreadDict[sl[key2field['analysis_id']]] = sl
     
     return (spreadDict, key2field)
 
@@ -105,11 +105,14 @@ def spreadsheet2RGdict(spreadFile, analysisID):
                 'LB' : 'RNA-Seq:%s:%s' % (rec[k2f['center_name']], rec[k2f['lib_id']]),
                 'PL' : rec[k2f['platform']],
                 'PM' : rec[k2f['platform_model']],
-                'SM' : rec[k2f['sample_id']],
-                'SI' : rec[k2f['submitter_sample_id']],
-                'RG' : rec[k2f['read_group_label']].split(',')}
+                'SM' : rec[k2f['specimen_id']],
+                'SI' : rec[k2f['submitted_sample_id']]}
 
-    return RG_dict
+    files = []
+    if 'fastq_files' in k2f:
+        files = rec[k2f['fastq_files']].strip(' ').split(' ')
+
+    return (RG_dict, files)
 
 
 def xml2RGdict(xmlfile):
@@ -141,11 +144,6 @@ def xml2RGdict(xmlfile):
                 'SM' : sample_id,
                 'SI' : submitter_id}
 
-    ### collect read group labels and add them to dict
-    RG_dict['RG'] = []
-    for x in rtree.find('analysis_xml/ANALYSIS_SET/ANALYSIS/ANALYSIS_TYPE/REFERENCE_ALIGNMENT/RUN_LABELS').getchildren():
-        RG_dict['RG'].append(x.attrib['read_group_label'])
-        
     return RG_dict
 
 
@@ -162,7 +160,6 @@ if __name__ == "__main__":
     optional.add_argument("--analysisID", default=None, help="Analysis ID to be considered in the metadata file")
     optional.add_argument("--keepJunctions", default=False, action='store_true', help="keeps the junction file as {--out}.junctions")
     optional.add_argument("--useTMP", default=None, help="environment variable that is used as prefix for temprary data")
-    optional.add_argument("--weakRGcheck", action='store_true', default=False, help="only perform weak RG record check and generate generic RG ID in case of a single alignment file with multiple RG records present. Use with caution!")
     optional.add_argument("-h", "--help", action='store_true', help="show this help message and exit")
     star = parser.add_argument_group("STAR input parameters")
     star.add_argument("--runThreadN", type=int, default=4, help="Number of threads")
@@ -172,6 +169,7 @@ if __name__ == "__main__":
     star.add_argument("--alignIntronMax", type=int, default=500000, help="alignIntronMax")
     star.add_argument("--alignMatesGapMax", type=int, default=1000000, help="alignMatesGapMax")
     star.add_argument("--sjdbScore", type=int, default=2, help="sjdbScore")
+    star.add_argument("--limitBAMsortRAM", type=int, default=0, help="limitBAMsortRAM")
     star.add_argument("--alignSJDBoverhangMin", type=int, default=1, help="alignSJDBoverhangMin")
     star.add_argument("--genomeLoad", default="NoSharedMemory", help="genomeLoad")
     star.add_argument("--genomeFastaFiles", default=None, help="genome sequence in fasta format to rebuild index")
@@ -224,6 +222,41 @@ if __name__ == "__main__":
     ### collect fastq information from extraction dir
     align_sets = scan_workdir(os.path.abspath(workdir))
     
+    ### process read group information
+    files = []
+    if args.metaDataTab is not None:
+        (RG_dict, files_tmp) = spreadsheet2RGdict(args.metaDataTab, args.analysisID) 
+        files.extend(files_tmp)
+    elif args.outSAMattrRGxml is not None:
+        RG_dict = xml2RGdict(args.outSAMattrRGxml)
+    elif args.outSAMattrRGline is not None:
+        RG_dict = dict([(x.split(':', 1)[0], x.split(':', 1)[1]) for x in args.outSAMattrRGline.split()])
+    elif args.outSAMattrRGfile is not None:
+        _fh = open(args.outSAMattrRGfile, 'r')
+        RG_dict = dict([(x.split(':', 1)[0], x.split(':', 1)[1]) for x in _fh.next().strip().split()])
+        _fh.close()
+    else:
+        RG_dict = {'ID' : '', 'SM' : ''}
+
+    ### post-process RG-dict to comply with STAR conventions
+    for key in RG_dict:
+        sl = RG_dict[key].split(' ')
+        if len(sl) > 1:
+            RG_dict[key] = '"%s"' % RG_dict[key]
+
+    ### use list of fastq input files for whitelisting
+    if len(files) > 0:
+        align_sets = (align_sets[0], [x for x in align_sets[1] if (re.sub('(_[12]){,1}.fastq(.(gz|bz2|bz))*', '', os.path.basename(x[1])) in files)], align_sets[2])
+        if len(align_sets[1]) == 0:
+            print >> sys.stderr, 'All input files have been filtered out - no input remaining. Terminating.'
+            sys.exit()
+
+    ### use filename stub as read group label
+    RG_dict['RG'] = []
+    for fn in [x[1] for x in align_sets[1]]:
+        RG_dict['RG'].append(re.sub('(_[12]){,1}.fastq(.(gz|bz2|bz))*', '', os.path.basename(fn)))
+
+    ### prepare template string
     if align_sets[2] == 'PE':
         read_str = '${fastq_left} ${fastq_right}'
     else:
@@ -314,6 +347,7 @@ if __name__ == "__main__":
 --sjdbScore ${sjdbScore} \
 --alignSJDBoverhangMin ${alignSJDBoverhangMin} \
 --genomeLoad ${genomeLoad} \
+--limitBAMsortRAM ${limitBAMsortRAM} \
 --readFilesCommand ${readFilesCommand} \
 --outFilterMatchNminOverLread ${outFilterMatchNminOverLread} \
 --outFilterScoreMinOverLread ${outFilterScoreMinOverLread} \
@@ -338,6 +372,7 @@ if __name__ == "__main__":
         'sjdbScore': args.sjdbScore,
         'alignSJDBoverhangMin' : args.alignSJDBoverhangMin,
         'genomeLoad' : args.genomeLoad,
+        'limitBAMsortRAM' : args.limitBAMsortRAM,
         'readFilesCommand' : align_sets[0],
         'outFilterMatchNminOverLread' : args.outFilterMatchNminOverLread,
         'outFilterScoreMinOverLread' : args.outFilterScoreMinOverLread,
@@ -353,36 +388,6 @@ if __name__ == "__main__":
         cmd = string.Template(cmd).substitute({
             'fastq_right' : ','.join([os.path.join(x[0], x[2]) for x in align_sets[1]]) # os.path.abspath(pair[2]),
         })
-
-    ### process read group information
-    if args.metaDataTab is not None:
-        RG_dict = spreadsheet2RGdict(args.metaDataTab, args.analysisID) 
-    elif args.outSAMattrRGxml is not None:
-        RG_dict = xml2RGdict(args.outSAMattrRGxml)
-    elif args.outSAMattrRGline is not None:
-        RG_dict = dict([(x.split(':', 1)[0], x.split(':', 1)[1]) for x in args.outSAMattrRGline.split()])
-    elif args.outSAMattrRGfile is not None:
-        _fh = open(args.outSAMattrRGfile, 'r')
-        RG_dict = dict([(x.split(':', 1)[0], x.split(':', 1)[1]) for x in _fh.next().strip().split()])
-        _fh.close()
-    else:
-        RG_dict = {'ID' : '', 'SM' : ''}
-
-    ### perform sanity check on provided RG records
-    if 'RG' in RG_dict:
-        if args.weakRGcheck and len(align_sets[1]) == 1 and len(RG_dict['RG']) > 1:
-            RG_dict['RG'] = [RG_dict['ID']]
-            print >> sys.stderr, 'WARNING: generated generic RG ID: %s' % RG_dict['ID']
-        else:
-            assert (len(align_sets[1]) == len(RG_dict['RG'])), 'Number of input file (pairs) does not match read groups in given RUN-xml' 
-
-    ### post-process RG-dict to comply with STAR conventions
-    for key in RG_dict:
-        if key == 'RG':
-            continue
-        sl = RG_dict[key].split(' ')
-        if len(sl) > 1:
-            RG_dict[key] = '"%s"' % RG_dict[key]
 
     ### convert RG_dict into formatted RG line
     RG_line = []
