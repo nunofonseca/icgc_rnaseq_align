@@ -2,6 +2,7 @@
 #modifies TCGA rnaseq metadata to be PCAWG 2.0 rnaseq metadata v0.1
 #and does the submissiona and upload of the new realignments to CGHub
 use strict;
+use warnings;
 
 #programs
 my $CGSUBMIT='cgsubmit';
@@ -17,9 +18,6 @@ my $FAILED_READS='(<alignment_includes_failed_reads>.+<\/alignment_includes_fail
 my $date = `date +%Y-%m-%dT%T`;
 chomp($date);
 
-#temporary output files, will be deleted if script finishes successfully
-my $STDOUT_FILE="$0.stdout.$date";
-my $STDERR_FILE="$0.stderr.$date";
 
 #args
 my $template_analysis_xml = shift;
@@ -28,7 +26,9 @@ die "must submit an analysis.xml template file AND a list of uuids,filenames, an
 #optional, if not passed in, we don't submit
 my $submit_key = shift;
 
-main();
+#temporary output files, will be deleted if script finishes successfully
+my $STDOUT_FILE="$file_list.stdout.$date";
+my $STDERR_FILE="$file_list.stderr.$date";
 
 sub main()
 {
@@ -37,13 +37,13 @@ sub main()
 	while(my $line = <IN>)
 	{
 		chomp($line);
-		my ($original_analysis_id,$new_filepath,$new_md5) = split(/\t/,$line);
+		my ($original_analysis_id,$new_filepath,$new_md5,$run_cmd,$aligner) = split(/\t/,$line);
 		#dump original metadata
-		run_command("python dump_all_metadata.py $original_analysis_id",$STDOUT_FILE,$STDERR_FILE);
+		run_command("dump_all_metadata.py $original_analysis_id",$STDOUT_FILE,$STDERR_FILE);
 		#exract original metadata still relevant to PCAWG metadata
 		my $md_lines = extract_old_metadata_elements($original_analysis_id);
 		#create new metadata package from old metadata bits and template
-		my $new_analysis_id = synthesize_new_analysis($md_lines,$new_filepath,$new_md5,$template_analysis_xml,$original_analysis_id);
+		my $new_analysis_id = synthesize_new_analysis($md_lines,$new_filepath,$new_md5,$run_cmd,$template_analysis_xml,$original_analysis_id,$aligner);
 		#do the actual validation->submission->upload
 		if(validate_new_metadata($new_analysis_id) && $submit_key)
 		{
@@ -61,6 +61,7 @@ sub main()
 	}
 	close(IN);
 	open(IDS,">$file_list.id_map.tsv");
+	print IDS "old_analysis_id\tnew_analysis_id\n";
 	foreach my $a (@id_map)
 	{
 		my ($old,$new)=@$a;
@@ -93,10 +94,10 @@ sub upload_data()
 
 sub synthesize_new_analysis()
 {
-	my ($md_lines,$filepath,$md5,$templateF,$original_analysis_id) = @_;
+	my ($md_lines,$filepath,$md5,$run_cmd,$templateF,$original_analysis_id,$aligner) = @_;
+    my @run_cmds = split(/\$/,$run_cmd);
 
- 	my @f=split(/\//,$filepath);
-	my $filename = pop(@f);	
+    my $filename = "PCAWG.$original_analysis_id.$aligner.v1.bam";
 
 	my $new_analysis_id = run_command('uuidgen');
 	chomp($new_analysis_id);
@@ -106,7 +107,7 @@ sub synthesize_new_analysis()
 	#copy the original metadata into the new directory
 	run_command("rsync -av $original_analysis_id/*.xml $new_analysis_id/");
 	#link in the new realigned file into the new directory
-	run_command("ln -s $filepath $new_analysis_id/PCAWG.$filename");
+	run_command("ln -s $filepath $new_analysis_id/$filename");
 	
 	open(TEMPLATE,"<$templateF");
 	open(OUT,">$new_analysis_id/analysis.xml");
@@ -123,6 +124,8 @@ sub synthesize_new_analysis()
 			$line =~ s/filename="[^"]*"/filename="$filename"/;
 			$line =~ s/filetype="[^"]*"/filetype="bam"/;
 		}
+        my $tmp_cmd = join("\n", @run_cmds);
+        $line =~ s/<NOTES>.*<\/NOTES>/<NOTES>$tmp_cmd<\/NOTES>/;
 		if($line =~ /$FAILED_READS/)
 		{
 			my $cur_val = $1;
@@ -220,3 +223,5 @@ sub run_command
 	
 	return join("\n",@output);	
 }	
+
+main();
