@@ -138,10 +138,25 @@ sub synthesize_new_analysis()
 		if ($line =~ /\/ANALYSIS_ATTRIBUTES/ ) {
 			my $labels = $md_lines->{$ANALYSIS_LABELS};
 			my $length = scalar @$labels;
-			for(my $i=0; $i < $length; $i++)
+			for(my $i=0; $i < $length; )
 			{
-			    my $label = $labels->[$i];
-			    print OUT "$label\n";
+			    if ( $labels->[$i] eq ""  ) {
+				$i=$i+1;
+			    } else {
+				my $val = $labels->[$i+1];
+				#print ">>>>>>>>>>>>>>>".$val."\n";
+				if ( $val =~ /icgc_.+_id/ ) {
+				    # need to skip icgc_*_id	
+				    print "skipping...$val\n";
+				    $i=$i+4;
+				} else {
+				    print OUT $labels->[$i]."\n";			    
+				    print OUT $labels->[$i+1]."\n";			    
+				    print OUT $labels->[$i+2]."\n";			    
+				    print OUT $labels->[$i+3]."\n";			    
+				    $i=$i+4;
+				}
+			    }
 			}
 		}
 		print OUT "$line\n";
