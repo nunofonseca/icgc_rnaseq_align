@@ -4,8 +4,10 @@
 use strict;
 use warnings;
 
+use Data::Dumper;
+
 #programs
-my $CGSUBMIT='cgsubmit';
+my $CGSUBMIT='cgsubmit -s https://gtrepo-bsc.annailabs.com';
 my $GTUPLOAD='gtupload';
 
 #metadata constants
@@ -14,6 +16,9 @@ my $RUN_LABELS_STOP='<\/RUN_LABELS>';
 my $TARGETS='<TARGETS>';
 my $TARGETS_STOP='<\/TARGETS>';
 my $FAILED_READS='(<alignment_includes_failed_reads>.+<\/alignment_includes_failed_reads>)';
+my $ANALYSIS_LABELS='<ANALYSIS_ATTRIBUTES>';
+my $ANALYSIS_LABELS_STOP='<\/ANALYSIS_ATTRIBUTES>';
+
 
 my $date = `date +%Y-%m-%dT%T`;
 chomp($date);
@@ -39,7 +44,7 @@ sub main()
 		chomp($line);
 		my ($original_analysis_id,$new_filepath,$new_md5) = split(/\t/,$line);
 		#dump original metadata
-		run_command("dump_all_metadata.py $original_analysis_id",$STDOUT_FILE,$STDERR_FILE);
+		run_command("dump_all_metadata_bsc.py $original_analysis_id",$STDOUT_FILE,$STDERR_FILE);
 		#exract original metadata still relevant to PCAWG metadata
 		my $md_lines = extract_old_metadata_elements($original_analysis_id);
 
@@ -109,7 +114,6 @@ sub synthesize_new_analysis()
 	run_command("rsync -av $original_analysis_id/*.xml $new_analysis_id/");
 	#link in the new realigned file into the new directory
 	run_command("ln -s ../$filepath $new_analysis_id/PCAWG.$filename");
-	
 	open(TEMPLATE,"<$templateF");
 	open(OUT,">$new_analysis_id/analysis.xml");
 	while(my $line = <TEMPLATE>)
@@ -130,6 +134,15 @@ sub synthesize_new_analysis()
 			my $cur_val = $1;
 			my $val = $md_lines->{$FAILED_READS};
 			$line =~ s/$cur_val/$val/;
+		}
+		if ($line =~ /\/ANALYSIS_ATTRIBUTES/ ) {
+			my $labels = $md_lines->{$ANALYSIS_LABELS};
+			my $length = scalar @$labels;
+			for(my $i=0; $i < $length; $i++)
+			{
+			    my $label = $labels->[$i];
+			    print OUT "$label\n";
+			}
 		}
 		print OUT "$line\n";
 		if($line =~ /<\/ASSEMBLY>/)
@@ -185,14 +198,26 @@ sub extract_old_metadata_elements()
 		{
 			$SAVE=$TARGETS;
 		}
+		# nf: keep the analysis labels
+		if($line =~ /$ANALYSIS_LABELS/)
+		{
+			$SAVE=$ANALYSIS_LABELS;
+			$line="";
+		}
 		next unless($SAVE);
-		push(@{$lines{$SAVE}},$line);
-		if($line =~ /$RUN_LABELS_STOP/ || $line =~ /$TARGETS_STOP/)
+		if( $line =~ /$ANALYSIS_LABELS_STOP/)
+		{
+		    # do nothing
+		} else {
+		    push(@{$lines{$SAVE}},$line);
+		}
+		if($line =~ /$RUN_LABELS_STOP/ || $line =~ /$TARGETS_STOP/ || $line =~ /$ANALYSIS_LABELS_STOP/ )
 		{
 			$SAVE=undef;
 		}
 	}
 	close(OLD);
+	#print Dumper(\%lines);
 	return \%lines;	
 }
 

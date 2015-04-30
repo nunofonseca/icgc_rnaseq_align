@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ANALYSIS_SET xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.ncbi.nlm.nih.gov/viewvc/v1/trunk/sra/doc/SRA_1-5/SRA.analysis.xsd?view=co">
-  <ANALYSIS alias="PCAWG.94f8d946-a92e-4d2b-9f29-8e10f4274efe.bam" analysis_date="2014-08-02T21:48:26.320095" center_name="MSKCC">
+  <ANALYSIS alias="PCAWG.94f8d946-a92e-4d2b-9f29-8e10f4274efe.bam" analysis_date="2014-08-02T21:48:26.320095" center_name="EBI-EMBL">
     <TITLE>TCGA/ICGC PanCancer RNA-Seq realignment</TITLE>
-    <STUDY_REF refcenter="UCSC" refname="PCAWG_TEST">
+    <STUDY_REF refcenter="UCSC" refname="PCAWG-TEST">
     </STUDY_REF>
     <DESCRIPTION>Tophat2 realignment of TCGA RNA-Seq data from matching participants from the PanCan Analysis of Whole Genomes (PCAWG) study</DESCRIPTION>
     <ANALYSIS_TYPE>
@@ -104,29 +104,15 @@
               <STEP_INDEX>mapping</STEP_INDEX>
               <PREV_STEP_INDEX>NIL</PREV_STEP_INDEX>
               <PROGRAM>tophat2</PROGRAM>
-              <VERSION>2.0.10</VERSION>
-              <NOTES>tophat2 -p #threads --segment-length 20 --library-type=fr-unstranded --no-coverage-search --min-intron-length 6 --max-multihits 20 --mate-inner-dist 350 --mate-std-dev 300 -G gencode.v19.annotation.gtf --transcriptome-index GRCh37.p13.genome.chr_only_th2_trans/ --rg-id "RG_ID" --rg-sample "RG_ID" GRCh37.p13.genome.chr_only.fa -o "out_dir" left.fastq right.fastq</NOTES>
+              <VERSION>2.0.12</VERSION>
+              <NOTES>tophat2 -p #threads --segment-length 20 --library-type=fr-unstranded --no-coverage-search --min-intron-length 6 --max-multihits 20 --mate-inner-dist 350 --mate-std-dev 300 -G gencode.v19.annotation.gtf --transcriptome-index GRCh37.p13.genome.chr_only_th2_trans/  GRCh37.p13.genome.chr_only.fa -o "out_dir" left.fastq [right.fastq]</NOTES>
             </PIPE_SECTION>
-            <PIPE_SECTION section_name="fix_mates">
-              <STEP_INDEX>fix_mates</STEP_INDEX>
+            <PIPE_SECTION section_name="pipeline">
+              <STEP_INDEX>pipeline</STEP_INDEX>
               <PREV_STEP_INDEX>mapping</PREV_STEP_INDEX>
-              <PROGRAM>Picardi FixMateInformation</PROGRAM>
+              <PROGRAM>iRAP</PROGRAM>
               <VERSION></VERSION>
-              <NOTES>java -jar picard-tools/FixMateInformation.jar INPUT=accepted_hits.bam ASSUME_SORTED=false VALIDATION_STRINGENCY=LENIENT TMP_DIR=</NOTES>
-            </PIPE_SECTION>
-            <PIPE_SECTION section_name="merge">
-              <STEP_INDEX>merge</STEP_INDEX>
-              <PREV_STEP_INDEX>fix_mates</PREV_STEP_INDEX>
-              <PROGRAM>samtools merge</PROGRAM>
-              <VERSION>0.1.19</VERSION>
-              <NOTES>samtools merge - accepted_hits.bam unmapped.bam</NOTES>
-            </PIPE_SECTION>
-            <PIPE_SECTION section_name="bam_sort">
-              <STEP_INDEX>bam_sort</STEP_INDEX>
-              <PREV_STEP_INDEX>merge</PREV_STEP_INDEX>
-              <PROGRAM>samtools sort</PROGRAM>
-              <VERSION>0.1.19</VERSION>
-              <NOTES>samtools sort - "final.bam"</NOTES>
+              <NOTES>irap  sop=pawg3_th2_mapping </NOTES>
             </PIPE_SECTION>
           </PIPELINE>
           <DIRECTIVES>
@@ -145,7 +131,7 @@
     <ANALYSIS_ATTRIBUTES>
       <ANALYSIS_ATTRIBUTE>
         <TAG>STUDY</TAG>
-        <VALUE>PCAWG_TEST</VALUE>
+        <VALUE>PCAWG-TEST</VALUE>
       </ANALYSIS_ATTRIBUTE>
       <ANALYSIS_ATTRIBUTE>
         <TAG>workflow_name</TAG>
@@ -160,12 +146,12 @@
         <VALUE>https://github.com/kellrott/icgc_rnaseq_align</VALUE>
       </ANALYSIS_ATTRIBUTE>
       <ANALYSIS_ATTRIBUTE>
-        <TAG>workflow_bundle_url</TAG>
+        <TAG>workflow_bundle</TAG>
         <VALUE>NA</VALUE>
       </ANALYSIS_ATTRIBUTE>
       <ANALYSIS_ATTRIBUTE>
         <TAG>TOPHAT2_version</TAG>
-        <VALUE>2.0.10</VALUE>
+        <VALUE>2.0.12</VALUE>
       </ANALYSIS_ATTRIBUTE>
     </ANALYSIS_ATTRIBUTES>
   </ANALYSIS>
